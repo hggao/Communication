@@ -25,7 +25,7 @@ namespace CommClient
             ClientConn conn = new ClientConn(svr_ip, svr_port, Program.OnCommingData);
             if (0 != conn.Start())
             {
-                Console.WriteLine("Cannot start a connection to server, check if server is ready.");
+                Console.WriteLine("Cannot start a connection to server, check if server is ready, or args are wrong.");
                 return;
             }
 
