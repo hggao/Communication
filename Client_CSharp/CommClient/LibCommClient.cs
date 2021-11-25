@@ -22,15 +22,23 @@ namespace LibCommClient
             this.recv_cb = recv_cb;
         }
 
-        public void Start()
+        public int Start()
         {
             Console.WriteLine("Connect to communication server at {0}:{1}", svr_ip, svr_port);
             socket_client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            socket_client.ReceiveTimeout = 1000;
-            socket_client.Connect(svr_ip, svr_port);
+            try
+            {
+                socket_client.Connect(svr_ip, svr_port);
+            }
+            catch (SocketException e)
+            {
+                Console.WriteLine("{0} Error code: {1}.", e.Message, e.ErrorCode);
+                return -1;
+            }
 
             recvThread = new Thread(new ThreadStart(IncommingDataReceivingThread));
             recvThread.Start();
+            return 0;
         }
 
         public void IncommingDataReceivingThread()
@@ -57,8 +65,11 @@ namespace LibCommClient
 
         public void Stop()
         {
-            runningReceiving = false;
-            recvThread.Join();
+            if (recvThread != null && recvThread.IsAlive)
+            {
+                runningReceiving = false;
+                recvThread.Join();
+            }
             socket_client.Shutdown(SocketShutdown.Both);
             socket_client.Close();
             socket_client = null;

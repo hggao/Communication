@@ -23,7 +23,11 @@ namespace CommClient
             }
 
             ClientConn conn = new ClientConn(svr_ip, svr_port, Program.OnCommingData);
-            conn.Start();
+            if (0 != conn.Start())
+            {
+                Console.WriteLine("Cannot start a connection to server, check if server is ready.");
+                return;
+            }
 
             Console.WriteLine("Type 'quit' to quit or anything else as a message send to other clients");
             string in_str;
