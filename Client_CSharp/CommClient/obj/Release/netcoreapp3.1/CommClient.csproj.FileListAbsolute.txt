@@ -1,0 +1,14 @@
+C:\Users\hongg\source\repos\CommClient\CommClient\bin\Release\netcoreapp3.1\CommClient.exe
+C:\Users\hongg\source\repos\CommClient\CommClient\bin\Release\netcoreapp3.1\CommClient.deps.json
+C:\Users\hongg\source\repos\CommClient\CommClient\bin\Release\netcoreapp3.1\CommClient.runtimeconfig.json
+C:\Users\hongg\source\repos\CommClient\CommClient\bin\Release\netcoreapp3.1\CommClient.runtimeconfig.dev.json
+C:\Users\hongg\source\repos\CommClient\CommClient\bin\Release\netcoreapp3.1\CommClient.dll
+C:\Users\hongg\source\repos\CommClient\CommClient\bin\Release\netcoreapp3.1\CommClient.pdb
+C:\Users\hongg\source\repos\CommClient\CommClient\obj\Release\netcoreapp3.1\CommClient.csproj.AssemblyReference.cache
+C:\Users\hongg\source\repos\CommClient\CommClient\obj\Release\netcoreapp3.1\CommClient.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\hongg\source\repos\CommClient\CommClient\obj\Release\netcoreapp3.1\CommClient.AssemblyInfoInputs.cache
+C:\Users\hongg\source\repos\CommClient\CommClient\obj\Release\netcoreapp3.1\CommClient.AssemblyInfo.cs
+C:\Users\hongg\source\repos\CommClient\CommClient\obj\Release\netcoreapp3.1\CommClient.csproj.CoreCompileInputs.cache
+C:\Users\hongg\source\repos\CommClient\CommClient\obj\Release\netcoreapp3.1\CommClient.dll
+C:\Users\hongg\source\repos\CommClient\CommClient\obj\Release\netcoreapp3.1\CommClient.pdb
+C:\Users\hongg\source\repos\CommClient\CommClient\obj\Release\netcoreapp3.1\CommClient.genruntimeconfig.cache
