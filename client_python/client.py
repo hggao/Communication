@@ -3,17 +3,19 @@ import socket
 import sys
 import time
 from threading import Thread
+import json
 
 
-class Connection(Thread):
-    SVR_PORT = 2021
+class TcpConnection(Thread):
     PACKET_LIMIT = 1024 * 1024
 
-    def __init__(self, svr_ip):
+    def __init__(self, svr_ip, svr_port=2021, recv_cb=None):
         Thread.__init__(self)
         self.svr_ip = svr_ip
-        self.client_socket = None
-        self.running = True
+        self.svr_port = svr_port
+        self.recv_cb = recv_cb
+        self.socket = None
+        self.running = False
 
     def send_data(self, data_str):
         data_len = len(data_str)
@@ -22,12 +24,12 @@ class Connection(Thread):
             data_len = self.PACKET_LIMIT
             data_str = data_str[:data_len]
         header = "%12d" % data_len
-        self.client_socket.send(header.encode())
-        self.client_socket.send(data_str.encode())
+        self.socket.send(header.encode())
+        self.socket.send(data_str.encode())
 
     def recv_data(self):
         data = ""
-        header = self.client_socket.recv(12)
+        header = self.socket.recv(12)
         if not header:
             return ""
         lens = int(header.decode())
@@ -35,17 +37,18 @@ class Connection(Thread):
         while n_received < lens:
             remaining = lens - n_received
             buf_len = min(remaining, 4096)
-            bytes_block = self.client_socket.recv(buf_len)
+            bytes_block = self.socket.recv(buf_len)
             data += bytes_block.decode()
             n_received = len(data)
         return data
 
     def run(self):
-        print("Connect to communication server at %s:%d" % (self.svr_ip, self.SVR_PORT))
-        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client_socket.settimeout(1)
-        self.client_socket.connect((self.svr_ip, self.SVR_PORT))
+        print("Connect to communication server at %s:%d" % (self.svr_ip, self.svr_port))
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.connect((self.svr_ip, self.svr_port))
+        self.socket.settimeout(1)
 
+        self.running = True
         while self.running:
             try:
                 client_pdu = self.recv_data()
@@ -53,23 +56,158 @@ class Connection(Thread):
                     print("Connnection closed by peer, quit this connection.")
                     break
             except socket.timeout:
-                pass
+                continue
             except socket.error as v:
                 errorcode = v[0]
                 print("Socket recv exception: %s" % str(errorcode))
                 break
             else:
-                print("Got message: [%s]" % client_pdu)
+                if self.recv_cb is not None:
+                    self.recv_cb(client_pdu)
+                else:
+                    print("XXX: Discard message due to callback not available")
 
-        print("Client Connection exit.")
-        self.client_socket.close()
-        self.client_socket = None
+        print("Client TcpConnection exit.")
+        self.socket.close()
+        self.socket = None
 
-    def is_closed(self):
-        return self.client_socket is None
+    def is_connected(self):
+        return self.socket is not None
         
-    def stop_running(self):
+    def stop(self):
         self.running = False
+        #TODO: should wait till self.is_connected() to false. This may take up to 1 second.
+
+class UdpConnection(Thread):
+    PACKET_LIMIT = 1024 * 1024
+
+    def __init__(self, svr_ip, svr_port=2021, recv_cb=None):
+        Thread.__init__(self)
+        self.svr_ip = svr_ip
+        self.svr_port = svr_port
+        self.recv_cb = recv_cb
+        self.socket = None
+        self.running = False
+
+    def send_data(self, data_str):
+        data_len = len(data_str)
+        assert data_len != 0, "Try to send empty string shouldn't happen."
+        if data_len > self.PACKET_LIMIT:
+            data_len = self.PACKET_LIMIT
+            data_str = data_str[:data_len]
+        header = "%12d" % data_len
+        self.socket.send(header.encode())
+        self.socket.send(data_str.encode())
+
+    def recv_data(self):
+        data = ""
+        header = self.socket.recv(12)
+        if not header:
+            return ""
+        lens = int(header.decode())
+        n_received = 0
+        while n_received < lens:
+            remaining = lens - n_received
+            buf_len = min(remaining, 4096)
+            bytes_block = self.socket.recv(buf_len)
+            data += bytes_block.decode()
+            n_received = len(data)
+        return data
+
+    def run(self):
+        print("Connect to communication server at %s:%d" % (self.svr_ip, self.svr_port))
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.socket.connect((self.svr_ip, self.svr_port))
+        self.socket.settimeout(1)
+
+        self.running = True
+        while self.running:
+            try:
+                client_pdu = self.recv_data()
+                if not client_pdu:
+                    print("Connnection closed by peer, quit this connection.")
+                    break
+            except socket.timeout:
+                continue
+            except socket.error as v:
+                errorcode = v[0]
+                print("Socket recv exception: %s" % str(errorcode))
+                break
+            else:
+                if self.recv_cb is not None:
+                    self.recv_cb(client_pdu)
+                else:
+                    print("Discard message due to no callback available")
+
+        print("Client UdpConnection exit.")
+        self.socket.close()
+        self.socket = None
+
+    def is_connected(self):
+        return self.socket is not None
+        
+    def stop(self):
+        self.running = False
+        #TODO: should wait till self.is_connected() to false. This may take up to 1 second.
+
+class Tranport(object):
+    def __init__(self, svr_ip, svr_port):
+        Thread.__init__(self)
+        self.svr_ip = svr_ip
+        self.svr_port = svr_port
+        self.udp_port = None
+        self.tcp_conn = None
+        self.udp_conn = None
+
+    def on_tcp_data_recv_callback(self, data_str):
+        print("Tcp data received from server: [%s]" % data_str)
+        cmd = json.loads(data_str)
+        if cmd["pdu_type"] == "create_udp_channel":
+            assert self.udp_conn is None, "Udp channel had already created."
+            self.udp_port = int(cmd["data"])
+            self.udp_conn = UdpConnection(self.svr_ip, self.udp_port, self.on_udp_data_recv_callback)
+            self.udp_conn.start()
+        else:
+            print("XXX: PDU is not handled.")
+
+    def on_udp_data_recv_callback(self, data_str):
+        print("Udp data received from server: [%s]" % data_str)
+        print("XXX: Data is not handled.")
+
+    def connect(self):
+        self.tcp_conn = TcpConnection(svr_ip, svr_port, self.on_tcp_data_recv_callback)
+        self.tcp_conn.start()
+
+    def create_udp_channel(self):
+        cmd = {"pdu_type": "create_udp_channel",
+               "data": ""
+              }
+        cmd_str = json.dumps(cmd)
+        self.tcp_conn.send_data(cmd_str)
+
+    def send_tcp_data(self, data_str):
+        if self.tcp_conn is None:
+            print("XXX: No Tcp connection yet.")
+            return
+        cmd = {"pdu_type": "data",
+               "data": data_str
+              }
+        cmd_str = json.dumps(cmd)
+        self.tcp_conn.send_data(cmd_str)
+
+    def send_udp_data(self, data_str):
+        if self.udp_conn is None:
+            print("XXX: No Udp connection yet.")
+            return
+        self.udp_conn.send_data(data_str)
+
+    def close(self):
+        if self.tcp_conn is not None:
+            self.tcp_conn.stop()
+            self.tcp_conn = None
+        if self.udp_conn is not None:
+            self.udp_conn.stop()
+            self.udp_conn = None
 
 if __name__ == "__main__":
     svr_ip = ""
@@ -84,20 +222,27 @@ if __name__ == "__main__":
         print("")
         sys.exit(2)
 
-    conn = Connection(svr_ip)
-    conn.start()
+    tp = Tranport(svr_ip, svr_port)
+    tp.connect()
 
     print("Type 'quit' to quit or anything else as a message send to other clients")
     while True:
         in_str = input()
-        if conn.is_closed():
-            print("Connection to server is closed, quit now")
-            break
         if in_str == "quit":
             print("exit now......")
-            conn.stop_running()
+            tp.close()
             break;
+        elif in_str == "udp":
+            print("Ask server to create UDP channel......")
+            tp.create_udp_channel()
+        elif in_str.startswith("toudp:"):
+            print("Send udp data to server......")
+            tp.send_udp_data(in_str)
         elif len(in_str) > 0:
-            print("Send to other clients: [%s]" % in_str)
-            conn.send_data(in_str)
+            print("Send general data to server......")
+            tp.send_tcp_data(in_str)
+        else:
+            print("Unsurpported command, ignored")
+
+    tp.close()
     print("Done!")

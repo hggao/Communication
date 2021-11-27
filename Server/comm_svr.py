@@ -5,6 +5,7 @@ import sys
 import time
 from datetime import datetime
 from threading import Thread
+import json
 
 # This enables communication server to listen on port LISTEN_PORT for incoming connections
 LISTEN_IP   = ""
@@ -25,18 +26,16 @@ def log(msg):
     except IOError:
         pass
 
-class ClientWorkerConnection(Thread):
+class TcpConnection(Thread):
     PACKET_LIMIT = 1024 * 1024
 
-    def __init__(self, client_socket, client_addr, comm_svr):
+    def __init__(self, socket, client_addr, recv_cb):
         Thread.__init__(self)
-        self.comm_svr = comm_svr
-        #Register self from communication server
-        self.comm_svr.add_client(self)
-        self.client_socket = client_socket
-        self.client_socket.settimeout(1)
+        self.recv_cb = recv_cb
+        self.socket = socket
+        self.socket.settimeout(1)
         self.client_addr = client_addr
-        self.running = True
+        self.running = False
 
     def send_data(self, data_str):
         data_len = len(data_str)
@@ -45,12 +44,12 @@ class ClientWorkerConnection(Thread):
             data_len = self.PACKET_LIMIT
             data_str = data_str[:data_len]
         header = "%12d" % data_len
-        self.client_socket.send(header.encode())
-        self.client_socket.send(data_str.encode())
+        self.socket.send(header.encode())
+        self.socket.send(data_str.encode())
 
     def recv_data(self):
         data = ""
-        header = self.client_socket.recv(12)
+        header = self.socket.recv(12)
         if not header:
             return ""
         lens = int(header.decode())
@@ -59,17 +58,18 @@ class ClientWorkerConnection(Thread):
         while n_received < lens:
             remaining = lens - n_received
             buf_len = min(remaining, 4096)
-            bytes_block = self.client_socket.recv(buf_len)
+            bytes_block = self.socket.recv(buf_len)
             data += bytes_block.decode()
             n_received = len(data)
         return data
 
     def run(self):
-        self.send_data("Welcome!")
+        self.send_data('{"pdu_type": "Welcome!", "data":""}') #Debugging purpose
+        self.running = True
         while self.running:
             try:
-                client_pdu = self.recv_data()
-                if not client_pdu:
+                data_str = self.recv_data()
+                if not data_str:
                     log("Connnection closed by peer, quit this connection.")
                     break
             except socket.timeout:
@@ -78,24 +78,153 @@ class ClientWorkerConnection(Thread):
                 log("Socket recv exception: %s" % str(e))
                 break
             else:
-                log("Got message from client: %s" % client_pdu)
-                #Queue into comm svr for dispatching
-                self.comm_svr.new_PDU_from_client(self, client_pdu)
+                if self.recv_cb is not None:
+                    self.recv_cb(data_str)
+                else:
+                    log("XXX: Discard data due to callback not available")
 
-        log("ClientWorkerConnection exit.")
-        self.client_socket.close()
-        #Unregister self from communication server
-        self.comm_svr.remove_client(self)
+        log("TcpConnection exit.")
+        self.socket.close()
+        self.socket = None
 
-    def stop_running(self):
+    def stop(self):
+        self.running = False
+        #TODO: wait up to 1 second until thread quit
+
+
+class UdpConnection(Thread):
+    PACKET_LIMIT = 1024 * 1024
+
+    def __init__(self, socket, recv_cb):
+        Thread.__init__(self)
+        self.recv_cb = recv_cb
+        self.socket = socket
+        self.socket.settimeout(1)
         self.running = False
 
+    def send_data(self, data_str):
+        data_len = len(data_str)
+        assert data_len != 0, "Try to send empty string shouldn't happen."
+        if data_len > self.PACKET_LIMIT:
+            data_len = self.PACKET_LIMIT
+            data_str = data_str[:data_len]
+        header = "%12d" % data_len
+        self.socket.send(header.encode())
+        self.socket.send(data_str.encode())
+
+    def recv_data(self):
+        data = ""
+        header = self.socket.recv(12)
+        if not header:
+            return ""
+        lens = int(header.decode())
+        # Receiving data block
+        n_received = 0
+        while n_received < lens:
+            remaining = lens - n_received
+            buf_len = min(remaining, 4096)
+            bytes_block = self.socket.recv(buf_len)
+            data += bytes_block.decode()
+            n_received = len(data)
+        return data
+
+    def run(self):
+        self.running = True
+        while self.running:
+            try:
+                data_str = self.recv_data()
+                if not data_str:
+                    log("Connnection closed by peer, quit this connection.")
+                    break
+            except socket.timeout:
+                continue
+            except Exception as e:
+                log("Socket recv exception: %s" % str(e))
+                break
+            else:
+                if self.recv_cb is not None:
+                    self.recv_cb(data_str)
+                else:
+                    log("XXX: Discard data due to callback not available")
+
+        log("UdpConnection exit.")
+        self.socket.close()
+        self.socket = None
+
+    def stop(self):
+        self.running = False
+        #TODO: wait up to 1 second until thread quit
+
+class Transport(object):
+    def __init__(self, tp_svr, tcp_socket, tcp_addr, tcp_recv_cb, udp_recv_cb):
+        self.tcp_conn = None
+        self.udp_conn = None
+        self.tp_svr = tp_svr
+        self.tcp_socket = tcp_socket
+        self.tcp_addr = tcp_addr
+        self.tcp_recv_cb = tcp_recv_cb
+        self.udp_recv_cb = udp_recv_cb
+
+    def start(self):
+        self.tcp_conn = TcpConnection(self.tcp_socket, self.tcp_addr, self.on_tcp_data_recv_callback)
+        self.tcp_conn.start()
+
+    def on_tcp_data_recv_callback(self, data_str):
+        cmd = json.loads(data_str)
+        if cmd["pdu_type"] == "create_udp_channel":
+            log("Client request to create UDP channel")
+            udp_port = self.creat_udp_channel()
+            reply = {
+                      "pdu_type": "create_udp_channel",
+                      "data": "%d" % udp_port
+                    }
+            self.send_tcp_data(json.dumps(reply))
+        else:
+            self.tcp_recv_cb(self, data_str)
+
+    def on_udp_data_recv_callback(self, data_str):
+        self.udp_recv_cb(self, data_str)
+
+    def creat_udp_channel(self):
+        if self.udp_conn is not None:
+            log("UDP socket channel created already, Ignore this request")
+            return
+        udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,1)
+        udp_port = self.tp_svr.get_next_udp_port()
+        while True:
+            try:
+                udp_socket.bind(("", udp_port))
+                break
+            except socket.error:
+                log("Bind on port %d failed, try another port" % udp_port)
+                udp_port = self.tp_svr.get_next_udp_port()
+                continue
+        self.udp_conn = UdpConnection(udp_socket, self.on_udp_data_recv_callback)
+        self.udp_conn.start()
+        return udp_port
+
+    def send_tcp_data(self, data_str):
+        self.tcp_conn.send_data(data_str)
+
+    def send_udp_data(self, data_str):
+        self.udp_conn.send_data(data_str)
+
+    def stop(self):
+        if self.tcp_conn is not None:
+            self.tcp_conn.stop()
+            self.tcp_conn = None
+        if self.udp_conn is not None:
+            self.udp_conn.stop()
+            self.udp_conn = None
+
+
 class CommServerListener(Thread):
-    def __init__(self, ip, port, comm_svr):
+    def __init__(self, ip, port, new_connect_cb):
         Thread.__init__(self)
         self.ip = ip
         self.port = port
-        self.comm_svr = comm_svr
+        self.new_connect_cb = new_connect_cb
         self.running = True
 
     def run(self):
@@ -103,12 +232,12 @@ class CommServerListener(Thread):
         while True:
             try:
                 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             except Exception as msg:
                 log("Error create socket: %s", msg)
                 server_socket = None
                 continue
             try:
-                server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 server_socket.bind((self.ip, self.port))
                 server_socket.listen(2)
                 server_socket.settimeout(1)
@@ -130,8 +259,7 @@ class CommServerListener(Thread):
                 raise
             else:
                 log("Accept connection from: %s" % '.'.join(map(str, client_addr)))
-                client = ClientWorkerConnection(client_sock, client_addr, self.comm_svr)
-                client.start()
+                self.new_connect_cb(client_sock, client_addr)
 
         # 3. Server socket close after got quit signal
         server_socket.close()
@@ -140,38 +268,46 @@ class CommServerListener(Thread):
         log("Stop communication server listener.")
         self.running = False
 
-class CommServer(object):
+class TransportServer(object):
     def __init__(self, svr_ip, svr_port):
+        self.udp_port = 30000
+        self.listener = None
         self.clients = []
-        self.listener = CommServerListener(svr_ip, svr_port, self)
-
-    def add_client(self, client):
-        log("Add new client: %s" % str(client))
-        self.clients.append(client)
 
     def remove_client(self, client):
         log("Remove client: %s" % str(client))
         self.clients.remove(client)
 
-    def new_PDU_from_client(self, client, pdu):
-        log("PDU dispathing ......")
-        for cli in self.clients:
-            if cli != client:
-                cli.send_data(pdu)
-        log("PDU dispathing Done!")
-
     def get_client_count(self):
         return len(self.clients)
+
+    def get_next_udp_port(self):
+        self.udp_port += 1
+        if self.udp_port > 40000:
+            self.udp_port = 30001
+        return self.udp_port
+
+    def on_tcp_recv_callback(self, tp, data_str):
+        log("Tcp data from %s: [%s]" % (str(tp), data_str))
+
+    def on_udp_recv_callback(self, tp, data_str):
+        log("Ucp data from %s: [%s]" % (str(tp), data_str))
+
+    def on_new_connect_cb(self, tcp_socket, tcp_addr):
+        tp = Transport(self, tcp_socket, tcp_addr, self.on_tcp_recv_callback, self.on_udp_recv_callback)
+        self.clients.append(tp)
+        tp.start()
+
+    def start_service(self):
+        self.listener = CommServerListener(svr_ip, svr_port, self.on_new_connect_cb)
+        self.listener.start()
 
     def stop_service(self):
         log("Stop listening.")
         self.listener.stop()
         log("Stop service, ask all clients to stop.")
-        for cli in self.clients:
-            cli.stop_running()
-
-    def start_service(self):
-        self.listener.start()
+        for tp in self.clients:
+            tp.stop()
 
 
 if __name__ == "__main__":
@@ -187,7 +323,7 @@ if __name__ == "__main__":
     print("")
 
     log("Start communication service at %s:%d" % (svr_ip, svr_port))
-    comm_svr = CommServer(svr_ip, svr_port)
+    comm_svr = TransportServer(svr_ip, svr_port)
     comm_svr.start_service()
 
     print("Type 'exit' to quit communication server")
