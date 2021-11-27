@@ -119,6 +119,7 @@ class UdpConnection(Thread):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.connect((self.svr_ip, self.svr_port))
         self.socket.settimeout(1)
+        self.send_data("010011000111")
 
         self.running = True
         while self.running:

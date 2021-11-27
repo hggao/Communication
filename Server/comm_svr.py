@@ -29,9 +29,10 @@ def log(msg):
 class TcpConnection(Thread):
     PACKET_LIMIT = 1024 * 1024
 
-    def __init__(self, socket, client_addr, recv_cb):
+    def __init__(self, socket, client_addr, recv_cb, close_cb):
         Thread.__init__(self)
         self.recv_cb = recv_cb
+        self.close_cb = close_cb
         self.socket = socket
         self.socket.settimeout(1)
         self.client_addr = client_addr
@@ -86,6 +87,7 @@ class TcpConnection(Thread):
         log("TcpConnection exit.")
         self.socket.close()
         self.socket = None
+        self.close_cb()
 
     def stop(self):
         self.running = False
@@ -95,35 +97,41 @@ class TcpConnection(Thread):
 class UdpConnection(Thread):
     PACKET_LIMIT = 1024 * 1024
 
-    def __init__(self, socket, recv_cb):
+    def __init__(self, socket, recv_cb, close_cb):
         Thread.__init__(self)
         self.recv_cb = recv_cb
+        self.close_cb = close_cb
         self.socket = socket
-        self.socket.settimeout(1)
+        self.client_addr = None
         self.running = False
 
     def send_data(self, data_str):
+        if self.client_addr is None:
+            log("XXX: Don't know client UDP addr yet, discard sending")
+            return
         data_len = len(data_str)
         assert data_len != 0, "Try to send empty string shouldn't happen."
         if data_len > self.PACKET_LIMIT:
             data_len = self.PACKET_LIMIT
             data_str = data_str[:data_len]
         header = "%12d" % data_len
-        self.socket.send(header.encode())
-        self.socket.send(data_str.encode())
+        self.socket.sendto(header.encode(), self.client_addr)
+        self.socket.sendto(data_str.encode(), self.client_addr)
 
     def recv_data(self):
         data = ""
-        header = self.socket.recv(12)
+        header, addr = self.socket.recvfrom(12)
         if not header:
             return ""
+
+        self.client_addr = addr
         lens = int(header.decode())
         # Receiving data block
         n_received = 0
         while n_received < lens:
             remaining = lens - n_received
             buf_len = min(remaining, 4096)
-            bytes_block = self.socket.recv(buf_len)
+            bytes_block, addr = self.socket.recvfrom(buf_len)
             data += bytes_block.decode()
             n_received = len(data)
         return data
@@ -142,21 +150,25 @@ class UdpConnection(Thread):
                 log("Socket recv exception: %s" % str(e))
                 break
             else:
-                if self.recv_cb is not None:
-                    self.recv_cb(data_str)
+                if data_str == "010011000111":
+                    pass #Hacking, first package for telling server the client udp address
                 else:
-                    log("XXX: Discard data due to callback not available")
+                    if self.recv_cb is not None and data_str != "010011000111":
+                        self.recv_cb(data_str)
+                    else:
+                        log("XXX: Discard data due to callback not available")
 
         log("UdpConnection exit.")
         self.socket.close()
         self.socket = None
+        self.close_cb()
 
     def stop(self):
         self.running = False
         #TODO: wait up to 1 second until thread quit
 
 class Transport(object):
-    def __init__(self, tp_svr, tcp_socket, tcp_addr, tcp_recv_cb, udp_recv_cb):
+    def __init__(self, tp_svr, tcp_socket, tcp_addr, tcp_recv_cb, udp_recv_cb, tp_close_cb):
         self.tcp_conn = None
         self.udp_conn = None
         self.tp_svr = tp_svr
@@ -164,9 +176,11 @@ class Transport(object):
         self.tcp_addr = tcp_addr
         self.tcp_recv_cb = tcp_recv_cb
         self.udp_recv_cb = udp_recv_cb
+        self.tp_close_cb = tp_close_cb
+        self.closed = False
 
     def start(self):
-        self.tcp_conn = TcpConnection(self.tcp_socket, self.tcp_addr, self.on_tcp_data_recv_callback)
+        self.tcp_conn = TcpConnection(self.tcp_socket, self.tcp_addr, self.on_tcp_data_recv_callback, self.on_tcp_close_cb)
         self.tcp_conn.start()
 
     def on_tcp_data_recv_callback(self, data_str):
@@ -191,6 +205,7 @@ class Transport(object):
             return
         udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,1)
+        udp_socket.settimeout(1)
         udp_port = self.tp_svr.get_next_udp_port()
         while True:
             try:
@@ -200,23 +215,40 @@ class Transport(object):
                 log("Bind on port %d failed, try another port" % udp_port)
                 udp_port = self.tp_svr.get_next_udp_port()
                 continue
-        self.udp_conn = UdpConnection(udp_socket, self.on_udp_data_recv_callback)
+        self.udp_conn = UdpConnection(udp_socket, self.on_udp_data_recv_callback, self.on_udp_close_cb)
         self.udp_conn.start()
         return udp_port
 
     def send_tcp_data(self, data_str):
+        if self.tcp_conn is None:
+            log("XXX: tcp_conn is none is not right.")
         self.tcp_conn.send_data(data_str)
 
     def send_udp_data(self, data_str):
+        if self.udp_conn is None:
+            log("Warning: No Udp connection for this tp client, skip sending data to it.")
+            return
         self.udp_conn.send_data(data_str)
 
+    def on_tcp_close_cb(self):
+        if self.closed:
+            return
+        self.stop()
+
+    def on_udp_close_cb(self):
+        if self.closed:
+            return
+        self.stop()
+
     def stop(self):
+        self.closed = True
         if self.tcp_conn is not None:
             self.tcp_conn.stop()
             self.tcp_conn = None
         if self.udp_conn is not None:
             self.udp_conn.stop()
             self.udp_conn = None
+        self.tp_close_cb(self)
 
 
 class CommServerListener(Thread):
@@ -274,10 +306,6 @@ class TransportServer(object):
         self.listener = None
         self.clients = []
 
-    def remove_client(self, client):
-        log("Remove client: %s" % str(client))
-        self.clients.remove(client)
-
     def get_client_count(self):
         return len(self.clients)
 
@@ -291,12 +319,21 @@ class TransportServer(object):
         log("Tcp data from %s: [%s]" % (str(tp), data_str))
 
     def on_udp_recv_callback(self, tp, data_str):
-        log("Ucp data from %s: [%s]" % (str(tp), data_str))
+        log("Ucp data from %s: [%s], dispatch to all......" % (str(tp), data_str))
+        for client in self.clients:
+            if client != tp:
+                client.send_udp_data(data_str)
 
     def on_new_connect_cb(self, tcp_socket, tcp_addr):
-        tp = Transport(self, tcp_socket, tcp_addr, self.on_tcp_recv_callback, self.on_udp_recv_callback)
+        tp = Transport(self, tcp_socket, tcp_addr, self.on_tcp_recv_callback, self.on_udp_recv_callback, self.on_connection_close_cb)
         self.clients.append(tp)
         tp.start()
+
+    def on_connection_close_cb(self, tp):
+        log("Remove client: %s" % str(tp))
+        self.clients.remove(tp)
+
+
 
     def start_service(self):
         self.listener = CommServerListener(svr_ip, svr_port, self.on_new_connect_cb)
