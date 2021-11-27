@@ -22,8 +22,8 @@ namespace CommClient
                 svr_port = Int32.Parse(args[1]);
             }
 
-            ClientConn conn = new ClientConn(svr_ip, svr_port, Program.OnCommingData);
-            if (0 != conn.Start())
+            Transport conn = new Transport(svr_ip, svr_port, Program.OnTcpDataReceived, Program.OnUdpDataReceived);
+            if (0 != conn.Connect())
             {
                 Console.WriteLine("Cannot start a connection to server, check if server is ready, or args are wrong.");
                 return;
@@ -42,21 +42,38 @@ namespace CommClient
                 if (in_str == "quit")
                 {
                     Console.WriteLine("exit now......");
-                    conn.Stop();
+                    conn.Close();
                     break;
+                }
+                else if (in_str == "udp")
+                {
+                    conn.CreateUdpChannel();
                 }
                 else if (in_str.Length > 0)
                 {
-                    Console.WriteLine("Send to other clients: [{0}]", in_str);
-                    conn.SendData(in_str);
+                    if (in_str.StartsWith("toudp:"))
+                    {
+                        Console.WriteLine("Send to UDP channel: [{0}]", in_str);
+                        conn.SendUdpData(in_str);
+                    } else
+                    {
+                        Console.WriteLine("Send to TCP channel: [{0}]", in_str);
+                        conn.SendTcpData(in_str);
+                    }
                 }
             }
             Console.WriteLine("Done!");
         }
 
-        public static int OnCommingData(string data)
+        public static int OnTcpDataReceived(string data)
         {
-            Console.WriteLine("Recieved data from other client: [{0}]", data);
+            Console.WriteLine("Recieved tcp data: [{0}]", data);
+            return 0;
+        }
+
+        public static int OnUdpDataReceived(string data)
+        {
+            Console.WriteLine("Recieved udp data: [{0}]", data);
             return 0;
         }
     }
