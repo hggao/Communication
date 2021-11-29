@@ -8,6 +8,7 @@ import json
 
 class TcpConnection(Thread):
     PACKET_LIMIT = 1024 * 1024
+    HEADER_LEN = 4
 
     def __init__(self, svr_ip, svr_port=2021, recv_cb=None):
         Thread.__init__(self)
@@ -17,28 +18,27 @@ class TcpConnection(Thread):
         self.socket = None
         self.running = False
 
-    def send_data(self, data_str):
-        data_len = len(data_str)
+    def send_data(self, data_bytes):
+        data_len = len(data_bytes)
         assert data_len != 0, "Try to send empty string shouldn't happen."
         if data_len > self.PACKET_LIMIT:
             data_len = self.PACKET_LIMIT
-            data_str = data_str[:data_len]
-        header = "%12d" % data_len
-        self.socket.send(header.encode())
-        self.socket.send(data_str.encode())
+            data_bytes = data_bytes[:data_len]
+        header = data_len.to_bytes(self.HEADER_LEN, byteorder="big")
+        self.socket.send(header + data_bytes)
 
     def recv_data(self):
-        data = ""
-        header = self.socket.recv(12)
+        data = bytes([])
+        header = self.socket.recv(self.HEADER_LEN)
         if not header:
-            return ""
-        lens = int(header.decode())
+            return b""
+        lens = int.from_bytes(header, byteorder="big")
+        # Receiving data block
         n_received = 0
         while n_received < lens:
             remaining = lens - n_received
             buf_len = min(remaining, 4096)
-            bytes_block = self.socket.recv(buf_len)
-            data += bytes_block.decode()
+            data += self.socket.recv(buf_len)
             n_received = len(data)
         return data
 
@@ -79,7 +79,7 @@ class TcpConnection(Thread):
         #TODO: should wait till self.is_connected() to false. This may take up to 1 second.
 
 class UdpConnection(Thread):
-    PACKET_LIMIT = 1024 * 1024
+    PACKET_LIMIT = 1024
 
     def __init__(self, svr_ip, svr_port=2021, recv_cb=None):
         Thread.__init__(self)
@@ -89,29 +89,18 @@ class UdpConnection(Thread):
         self.socket = None
         self.running = False
 
-    def send_data(self, data_str):
-        data_len = len(data_str)
+    def send_data(self, data_bytes):
+        data_len = len(data_bytes)
         assert data_len != 0, "Try to send empty string shouldn't happen."
         if data_len > self.PACKET_LIMIT:
             data_len = self.PACKET_LIMIT
-            data_str = data_str[:data_len]
-        header = "%12d" % data_len
-        self.socket.send(header.encode())
-        self.socket.send(data_str.encode())
+            data_bytes = data_bytes[:data_len]
+        self.socket.send(data_bytes)
 
     def recv_data(self):
-        data = ""
-        header = self.socket.recv(12)
-        if not header:
-            return ""
-        lens = int(header.decode())
-        n_received = 0
-        while n_received < lens:
-            remaining = lens - n_received
-            buf_len = min(remaining, 4096)
-            bytes_block = self.socket.recv(buf_len)
-            data += bytes_block.decode()
-            n_received = len(data)
+        data = self.socket.recv(self.PACKET_LIMIT)
+        if not data:
+            return b""
         return data
 
     def run(self):
@@ -119,7 +108,7 @@ class UdpConnection(Thread):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.connect((self.svr_ip, self.svr_port))
         self.socket.settimeout(1)
-        self.send_data("010011000111")
+        self.send_data(b"010011000111")
 
         self.running = True
         while self.running:
@@ -160,9 +149,9 @@ class Tranport(object):
         self.tcp_conn = None
         self.udp_conn = None
 
-    def on_tcp_data_recv_callback(self, data_str):
-        print("Tcp data received from server: [%s]" % data_str)
-        cmd = json.loads(data_str)
+    def on_tcp_data_recv_callback(self, data_bytes):
+        print("Tcp data received from server: [%s]" % data_bytes.decode())
+        cmd = json.loads(data_bytes.decode())
         if cmd["pdu_type"] == "create_udp_channel":
             assert self.udp_conn is None, "Udp channel had already created."
             self.udp_port = int(cmd["data"])
@@ -171,8 +160,8 @@ class Tranport(object):
         else:
             print("XXX: PDU is not handled.")
 
-    def on_udp_data_recv_callback(self, data_str):
-        print("Udp data received from server: [%s]" % data_str)
+    def on_udp_data_recv_callback(self, data_bytes):
+        print("Udp data received from server: [%s]" % data_bytes)
         print("XXX: Data is not handled.")
 
     def connect(self):
@@ -184,7 +173,7 @@ class Tranport(object):
                "data": ""
               }
         cmd_str = json.dumps(cmd)
-        self.tcp_conn.send_data(cmd_str)
+        self.tcp_conn.send_data(cmd_str.encode())
 
     def send_tcp_data(self, data_str):
         if self.tcp_conn is None:
@@ -194,13 +183,13 @@ class Tranport(object):
                "data": data_str
               }
         cmd_str = json.dumps(cmd)
-        self.tcp_conn.send_data(cmd_str)
+        self.tcp_conn.send_data(cmd_str.encode())
 
-    def send_udp_data(self, data_str):
+    def send_udp_data(self, data_bytes):
         if self.udp_conn is None:
             print("XXX: No Udp connection yet.")
             return
-        self.udp_conn.send_data(data_str)
+        self.udp_conn.send_data(data_bytes)
 
     def close(self):
         if self.tcp_conn is not None:
@@ -238,7 +227,7 @@ if __name__ == "__main__":
             tp.create_udp_channel()
         elif in_str.startswith("toudp:"):
             print("Send udp data to server......")
-            tp.send_udp_data(in_str)
+            tp.send_udp_data(in_str.encode())
         elif len(in_str) > 0:
             print("Send general data to server......")
             tp.send_tcp_data(in_str)
