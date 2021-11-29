@@ -54,8 +54,14 @@ namespace CommClient
                     if (in_str.StartsWith("toudp:"))
                     {
                         Console.WriteLine("Send to UDP channel: [{0}]", in_str);
-                        conn.SendUdpData(in_str);
-                    } else
+                        conn.SendUdpData(Encoding.ASCII.GetBytes(in_str));
+                    } 
+                    else if (in_str.StartsWith("totcp:"))
+                    {
+                        Console.WriteLine("Send to TCP channel for broadcast: [{0}]", in_str);
+                        conn.BroadcastTcpMessage(in_str);
+                    }
+                    else
                     {
                         Console.WriteLine("Send to TCP channel: [{0}]", in_str);
                         conn.SendTcpData(in_str);
@@ -65,15 +71,15 @@ namespace CommClient
             Console.WriteLine("Done!");
         }
 
-        public static int OnTcpDataReceived(string data)
+        public static int OnTcpDataReceived(byte[] data)
         {
-            Console.WriteLine("Recieved tcp data: [{0}]", data);
+            Console.WriteLine("Recieved tcp data: [{0}]", Encoding.Default.GetString(data));
             return 0;
         }
 
-        public static int OnUdpDataReceived(string data)
+        public static int OnUdpDataReceived(byte[] data)
         {
-            Console.WriteLine("Recieved udp data: [{0}]", data);
+            Console.WriteLine("Recieved udp data: [{0}]", Encoding.Default.GetString(data));
             return 0;
         }
     }

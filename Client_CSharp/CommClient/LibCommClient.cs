@@ -8,21 +8,22 @@ namespace LibCommClient
 {
     public class TPTcpPdu
     {
-        public string pdu_type { get; set; }
+        public string action { get; set; }
         public string data { get; set; }
     }
 
     class TcpConnnection
     {
         private const int PACKET_LIMIT = 1024 * 1024;
+        private const int HEADER_LEN = 4;
         private Socket socket_client = null;
         private string svr_ip;
         private int svr_port;
-        private Func<string, int> recv_cb;
+        private Func<byte[], int> recv_cb;
         private Thread recvThread = null;
         private bool runningReceiving = true;
 
-        public TcpConnnection(string svr_ip, int svr_port, Func<string, int> recv_cb)
+        public TcpConnnection(string svr_ip, int svr_port, Func<byte[], int> recv_cb)
         {
             this.svr_ip = svr_ip;
             this.svr_port = svr_port;
@@ -52,12 +53,12 @@ namespace LibCommClient
         {
             while (runningReceiving)
             {
-                string client_pdu = RecvData();
+                byte[] client_pdu = RecvData();
                 if (client_pdu == null)
                 {
                     break;
                 }
-                if (client_pdu == "")
+                if (client_pdu.Length == 0)
                 {
                     continue;
                 }
@@ -82,34 +83,33 @@ namespace LibCommClient
             socket_client = null;
         }
 
-        public int SendData(string data_str)
+        public int SendData(byte[] data)
         {
-            if (data_str.Length <= 0)
+            int len = data.Length;
+            if (len <= 0)
             {
                 return 0;
             }
-            if (data_str.Length > PACKET_LIMIT)
+            if (len > PACKET_LIMIT)
             {
-                data_str = data_str.Substring(0, PACKET_LIMIT);
+                len = PACKET_LIMIT;
             }
-            byte[] bytes_data = Encoding.ASCII.GetBytes(data_str);
-
-            string head_str = String.Format("{0, 12}", bytes_data.Length);
-            byte[] bytes_hdr = Encoding.ASCII.GetBytes(head_str);
-            socket_client.Send(bytes_hdr);
-            socket_client.Send(bytes_data);
-            return bytes_hdr.Length + bytes_data.Length;
+            byte[] bytes_hdr = BitConverter.GetBytes(len);
+            byte[] buffer = new byte[HEADER_LEN + len];
+            Array.Copy(bytes_hdr, buffer, HEADER_LEN);
+            Array.Copy(data, 0, buffer, HEADER_LEN, len);
+            socket_client.Send(buffer);
+            return buffer.Length;
         }
 
-        public string RecvData()
+        public byte[] RecvData()
         {
-            byte[] bytes_hdr = new byte[12];
-            byte[] bytes_data = null;
+            byte[] bytes_hdr = new byte[HEADER_LEN];
             try
             {
                 if (socket_client.Poll(1000, SelectMode.SelectRead))
                 {
-                    int byteCount = socket_client.Receive(bytes_hdr, 12, SocketFlags.None);
+                    int byteCount = socket_client.Receive(bytes_hdr, HEADER_LEN, SocketFlags.None);
                     if (byteCount == 0)
                     {
                         Console.WriteLine("Socket closed by peer");
@@ -118,7 +118,7 @@ namespace LibCommClient
                 }
                 else
                 {
-                    return "";
+                    return new byte[] { };
                 }
             }
             catch (SocketException e)
@@ -126,13 +126,13 @@ namespace LibCommClient
                 Console.WriteLine("{0} Error code: {1}.", e.Message, e.ErrorCode);
                 return null;
             }
-            int data_len = Int32.Parse(Encoding.Default.GetString(bytes_hdr));
+            int data_len = BitConverter.ToInt32(bytes_hdr, 0);
             if (data_len <= 0)
             {
                 Console.WriteLine("incorrect length, {0} bytes parsed from header block", data_len);
                 return null;
             }
-            bytes_data = new byte[data_len];
+            byte[] bytes_data = new byte[data_len];
             try
             {
                 int byteCount = socket_client.Receive(bytes_data, data_len, SocketFlags.None);
@@ -147,21 +147,21 @@ namespace LibCommClient
                 Console.WriteLine("{0} Error code: {1}.", e.Message, e.ErrorCode);
                 return null;
             }
-            return Encoding.Default.GetString(bytes_data);
+            return bytes_data;
         }
     }
 
     class UdpConnnection
     {
-        private const int PACKET_LIMIT = 1024 * 1024;
+        private const int PACKET_LIMIT = 1024;
         private Socket socket_client = null;
         private string svr_ip;
         private int svr_port;
-        private Func<string, int> recv_cb;
+        private Func<byte[], int> recv_cb;
         private Thread recvThread = null;
         private bool runningReceiving = true;
 
-        public UdpConnnection(string svr_ip, int svr_port, Func<string, int> recv_cb)
+        public UdpConnnection(string svr_ip, int svr_port, Func<byte[], int> recv_cb)
         {
             this.svr_ip = svr_ip;
             this.svr_port = svr_port;
@@ -181,7 +181,7 @@ namespace LibCommClient
                 Console.WriteLine("{0} Error code: {1}.", e.Message, e.ErrorCode);
                 return -1;
             }
-            this.SendData("010011000111");
+            this.SendData(Encoding.ASCII.GetBytes("010011000111"));
             recvThread = new Thread(new ThreadStart(ReceiveDataThreadProc));
             recvThread.Start();
             return 0;
@@ -191,12 +191,12 @@ namespace LibCommClient
         {
             while (runningReceiving)
             {
-                string client_pdu = RecvData();
+                byte[] client_pdu = RecvData();
                 if (client_pdu == null)
                 {
                     break;
                 }
-                if (client_pdu == "")
+                if (client_pdu.Length == 0)
                 {
                     continue;
                 }
@@ -221,34 +221,34 @@ namespace LibCommClient
             socket_client = null;
         }
 
-        public int SendData(string data_str)
+        public int SendData(byte[] data)
         {
-            if (data_str.Length <= 0)
+            if (data.Length <= 0)
             {
                 return 0;
             }
-            if (data_str.Length > PACKET_LIMIT)
+            byte[] bytes_data = null;
+            if (data.Length > PACKET_LIMIT)
             {
-                data_str = data_str.Substring(0, PACKET_LIMIT);
+                bytes_data = new byte[PACKET_LIMIT];
+                Array.Copy(data, bytes_data, PACKET_LIMIT);
             }
-            byte[] bytes_data = Encoding.ASCII.GetBytes(data_str);
-
-            string head_str = String.Format("{0, 12}", bytes_data.Length);
-            byte[] bytes_hdr = Encoding.ASCII.GetBytes(head_str);
-            socket_client.Send(bytes_hdr);
+            else
+            {
+                bytes_data = data;
+            }
             socket_client.Send(bytes_data);
-            return bytes_hdr.Length + bytes_data.Length;
+            return bytes_data.Length;
         }
 
-        public string RecvData()
+        public byte[] RecvData()
         {
-            byte[] bytes_hdr = new byte[12];
-            byte[] bytes_data = null;
+            byte[] bytes_data = new byte[PACKET_LIMIT];
             try
             {
                 if (socket_client.Poll(1000, SelectMode.SelectRead))
                 {
-                    int byteCount = socket_client.Receive(bytes_hdr, 12, SocketFlags.None);
+                    int byteCount = socket_client.Receive(bytes_data, PACKET_LIMIT, SocketFlags.None);
                     if (byteCount == 0)
                     {
                         Console.WriteLine("Socket closed by peer");
@@ -257,7 +257,7 @@ namespace LibCommClient
                 }
                 else
                 {
-                    return "";
+                    return new byte[] { };
                 }
             }
             catch (SocketException e)
@@ -265,28 +265,7 @@ namespace LibCommClient
                 Console.WriteLine("{0} Error code: {1}.", e.Message, e.ErrorCode);
                 return null;
             }
-            int data_len = Int32.Parse(Encoding.Default.GetString(bytes_hdr));
-            if (data_len <= 0)
-            {
-                Console.WriteLine("incorrect length, {0} bytes parsed from header block", data_len);
-                return null;
-            }
-            bytes_data = new byte[data_len];
-            try
-            {
-                int byteCount = socket_client.Receive(bytes_data, data_len, SocketFlags.None);
-                if (byteCount == 0 || byteCount < data_len)
-                {
-                    Console.WriteLine("Received {0} bytes, Socket closed by peer", byteCount);
-                    return null;
-                }
-            }
-            catch (SocketException e)
-            {
-                Console.WriteLine("{0} Error code: {1}.", e.Message, e.ErrorCode);
-                return null;
-            }
-            return Encoding.Default.GetString(bytes_data);
+            return bytes_data;
         }
     }
 
@@ -294,12 +273,12 @@ namespace LibCommClient
     {
         private string svr_ip;
         private int svr_port;
-        private Func<string, int> tcp_recv_cb;
-        private Func<string, int> udp_recv_cb;
+        private Func<byte[], int> tcp_recv_cb;
+        private Func<byte[], int> udp_recv_cb;
         private TcpConnnection tcp_conn = null;
         private UdpConnnection udp_conn = null;
 
-        public Transport(string svr_ip, int svr_port, Func<string, int> tcp_recv_cb, Func<string, int> udp_recv_cb)
+        public Transport(string svr_ip, int svr_port, Func<byte[], int> tcp_recv_cb, Func<byte[], int> udp_recv_cb)
         {
             this.svr_ip = svr_ip;
             this.svr_port = svr_port;
@@ -314,53 +293,57 @@ namespace LibCommClient
             return tcp_conn.Start();
         }
 
-        public int OnTcpDataReceived(string data_str)
+        public int OnTcpDataReceived(byte[] data)
         {
-            Console.WriteLine("Recieved tcp data: [{0}]", data_str);
-            TPTcpPdu pdu = JsonConvert.DeserializeObject<TPTcpPdu>(data_str);
-            if (pdu.pdu_type == "create_udp_channel")
+            TPTcpPdu pdu = JsonConvert.DeserializeObject<TPTcpPdu>(Encoding.Default.GetString(data));
+            if (pdu.action == "create_udp_channel")
             {
                 int udp_port = Int32.Parse(pdu.data);
                 udp_conn = new UdpConnnection(svr_ip, udp_port, OnUdpDataReceived);
                 udp_conn.Start();
             } else
             {
-                tcp_recv_cb(data_str);
+                tcp_recv_cb(data);
             }
 
             return 0;
         }
 
-        public int OnUdpDataReceived(string data_str)
+        public int OnUdpDataReceived(byte[] data)
         {
-            Console.WriteLine("Recieved udp data: [{0}]", data_str);
-            udp_recv_cb(data_str);
+            udp_recv_cb(data);
             return 0;
+        }
+
+        public void SendTcpPdu(string action, string data_str)
+        {
+            TPTcpPdu pdu = new TPTcpPdu();
+            pdu.action = action;
+            pdu.data = data_str;
+            string cmd_str = JsonConvert.SerializeObject(pdu);
+            tcp_conn.SendData(Encoding.ASCII.GetBytes(cmd_str));
         }
 
         public void CreateUdpChannel()
         {
-            TPTcpPdu pdu = new TPTcpPdu();
-            pdu.pdu_type = "create_udp_channel";
-            pdu.data = "";
-            string cmd_str = JsonConvert.SerializeObject(pdu);
-            tcp_conn.SendData(cmd_str);
+            SendTcpPdu("create_udp_channel", "");
         }
 
         public void SendTcpData(string data_str)
         {
-            TPTcpPdu pdu = new TPTcpPdu();
-            pdu.pdu_type = "data";
-            pdu.data = data_str;
-            string cmd_str = JsonConvert.SerializeObject(pdu);
-            tcp_conn.SendData(cmd_str);
+            SendTcpPdu("data", data_str);
         }
 
-        public void SendUdpData(string data_str)
+        public void BroadcastTcpMessage(string msg_str)
+        {
+            SendTcpPdu("broadcast", msg_str);
+        }
+
+        public void SendUdpData(byte[] data)
         {
             if (udp_conn == null)
                 return;
-            udp_conn.SendData(data_str);
+            udp_conn.SendData(data);
         }
 
         public bool IsClosed()

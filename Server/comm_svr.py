@@ -45,7 +45,7 @@ class TcpConnection(Thread):
         if data_len > self.PACKET_LIMIT:
             data_len = self.PACKET_LIMIT
             data_bytes = data_bytes[:data_len]
-        header = data_len.to_bytes(self.HEADER_LEN, byteorder="big")
+        header = data_len.to_bytes(self.HEADER_LEN, byteorder="little")
         self.socket.send(header + data_bytes)
 
     def recv_data(self):
@@ -53,7 +53,7 @@ class TcpConnection(Thread):
         header = self.socket.recv(self.HEADER_LEN)
         if not header:
             return b""
-        lens = int.from_bytes(header, byteorder="big")
+        lens = int.from_bytes(header, byteorder="little")
         # Receiving data block
         n_received = 0
         while n_received < lens:
@@ -64,7 +64,7 @@ class TcpConnection(Thread):
         return data
 
     def run(self):
-        self.send_data(b'{"pdu_type": "Welcome!", "data":""}') #Debugging purpose
+        self.send_data(b'{"action": "Welcome!", "data":""}') #Debugging purpose
         self.running = True
         while self.running:
             try:
@@ -176,11 +176,11 @@ class Transport(object):
 
     def on_tcp_data_recv_callback(self, data_bytes):
         cmd = json.loads(data_bytes.decode())
-        if cmd["pdu_type"] == "create_udp_channel":
+        if cmd["action"] == "create_udp_channel":
             log("Client request to create UDP channel")
             udp_port = self.creat_udp_channel()
             reply = {
-                      "pdu_type": "create_udp_channel",
+                      "action": "create_udp_channel",
                       "data": "%d" % udp_port
                     }
             self.send_tcp_data(json.dumps(reply).encode())
@@ -309,10 +309,18 @@ class TransportServer(object):
         return self.udp_port
 
     def on_tcp_recv_callback(self, tp, data_bytes):
-        log("Tcp data from %s: [%s]" % (str(tp), data_bytes.decode()))
+        log("Tcp data from %d: [%s]" % (tp.tp_id, data_bytes.decode()))
+        cmd = json.loads(data_bytes.decode())
+        if cmd["action"] == "broadcast":
+            log("Client request to broadcast message")
+            for client in self.clients:
+                if client != tp:
+                    client.send_tcp_data(data_bytes)
+        else:
+            log("No handling on the data, discard.")
 
     def on_udp_recv_callback(self, tp, data_bytes):
-        log("Ucp data from %s: [%s], dispatch to all......" % (str(tp), data_bytes.decode()))
+        log("Ucp data from %d: [%s], dispatch to all......" % (tp.tp_id, data_bytes.decode()))
         for client in self.clients:
             if client != tp:
                 client.send_udp_data(data_bytes)
@@ -325,7 +333,7 @@ class TransportServer(object):
         tp.start()
 
     def on_connection_close_cb(self, tp):
-        log("Remove client: %s" % str(tp))
+        log("Remove client: %d" % tp.tp_id)
         self.clients.remove(tp)
 
     def start_service(self):
