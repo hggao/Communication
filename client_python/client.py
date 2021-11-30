@@ -161,8 +161,7 @@ class Tranport(object):
             print("XXX: PDU is not handled.")
 
     def on_udp_data_recv_callback(self, data_bytes):
-        print("Udp data received from server: [%s]" % data_bytes)
-        print("XXX: Data is not handled.")
+        print("Udp data received from server, %d bytes. (XXX: Not handled.)" % len(data_bytes))
 
     def connect(self):
         self.tcp_conn = TcpConnection(svr_ip, svr_port, self.on_tcp_data_recv_callback)
