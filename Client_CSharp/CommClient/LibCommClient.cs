@@ -254,6 +254,9 @@ namespace LibCommClient
                         Console.WriteLine("Socket closed by peer");
                         return null;
                     }
+                    byte[] bytes_received = new byte[byteCount];
+                    Array.Copy(bytes_data, bytes_received, byteCount);
+                    return bytes_received;
                 }
                 else
                 {
@@ -265,7 +268,6 @@ namespace LibCommClient
                 Console.WriteLine("{0} Error code: {1}.", e.Message, e.ErrorCode);
                 return null;
             }
-            return bytes_data;
         }
     }
 

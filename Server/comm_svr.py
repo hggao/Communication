@@ -309,8 +309,9 @@ class TransportServer(object):
         return self.udp_port
 
     def on_tcp_recv_callback(self, tp, data_bytes):
-        log("Tcp data from %d: [%s]" % (tp.tp_id, data_bytes.decode()))
-        cmd = json.loads(data_bytes.decode())
+        data_str = data_bytes.decode()
+        log("Tcp data from %d: [%s]" % (tp.tp_id, data_str))
+        cmd = json.loads(data_str)
         if cmd["action"] == "broadcast":
             log("Client request to broadcast message")
             for client in self.clients:
@@ -320,7 +321,7 @@ class TransportServer(object):
             log("No handling on the data, discard.")
 
     def on_udp_recv_callback(self, tp, data_bytes):
-        log("Ucp data from %d: [%s], dispatch to all......" % (tp.tp_id, data_bytes.decode()))
+        log("Received UDP data %d bytes from %d, dispatch to all other clients" % (len(data_bytes), tp.tp_id))
         for client in self.clients:
             if client != tp:
                 client.send_udp_data(data_bytes)
