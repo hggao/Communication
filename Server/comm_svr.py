@@ -120,9 +120,10 @@ class UdpConnection(Thread):
         if not data:
             return b""
         if self.client_addr is None:
+            log("Received first UDP data, save addr %s" % str(addr))
             self.client_addr = addr
         elif self.client_addr != addr:
-            log("XXX: Received UDP data not from initial addr")
+            log("XXX: Received UDP data not from %s, not initial addr %s" % (str(addr), str(self.client_addr)))
             #TODO: Need further handling about this
         return data
 
