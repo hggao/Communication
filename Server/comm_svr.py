@@ -321,7 +321,7 @@ class TransportServer(object):
             log("No handling on the data, discard.")
 
     def on_udp_recv_callback(self, tp, data_bytes):
-        log("Received UDP data %d bytes from %d, dispatch to all other clients" % (len(data_bytes), tp.tp_id))
+        #log("Received UDP data %d bytes from %d, dispatch to all other clients" % (len(data_bytes), tp.tp_id))
         for client in self.clients:
             if client != tp:
                 client.send_udp_data(data_bytes)
