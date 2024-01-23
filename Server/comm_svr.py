@@ -12,7 +12,7 @@ LISTEN_IP   = ""
 LISTEN_PORT = 2021
 
 def log(msg):
-    # Removed these two lines for debugging
+    # Remove these two lines for debugging
     if len(msg) > 1024:
         msg = msg[:1016] + "[......]"
 
