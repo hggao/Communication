@@ -10,9 +10,10 @@ import json
 # This enables communication server to listen on port LISTEN_PORT for incoming connections
 LISTEN_IP   = ""
 LISTEN_PORT = 2021
+LOG_PATH = "/var/log/atto-comm/atto-comm.log"
 
 def log(msg):
-    # Remove these two lines for debugging
+    # Removed these two lines for debugging
     if len(msg) > 1024:
         msg = msg[:1016] + "[......]"
 
@@ -20,7 +21,7 @@ def log(msg):
     fmt_msg = "%s %s\n" % (str(t_now), msg)
     print(fmt_msg)
     try:
-        f = open('comm_server.log', 'a+')
+        f = open(LOG_PATH, 'a+')
         f.write(fmt_msg)
         f.close()
     except IOError:

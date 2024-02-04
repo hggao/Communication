@@ -1,0 +1,12 @@
+[Unit]
+Description=Atto communication server
+
+[Service]
+User=root
+WorkingDirectory=/home/www/comm
+ExecStart=/home/www/comm/atto-comm.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
