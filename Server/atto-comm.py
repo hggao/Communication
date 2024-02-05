@@ -260,7 +260,10 @@ class CommServerListener(Thread):
                 server_socket.bind((self.ip, self.port))
                 server_socket.listen(2)
                 server_socket.settimeout(1)
-                log("TCP listening at : %s:%d" % (self.ip==""?"*":self.ip, self.port))
+                listen_ip = self.ip
+                if listen_ip == "":
+                    listen_ip = "*"
+                log("TCP listening at : %s:%d" % (listen_ip, self.port))
             except Exception as msg:
                 log("Error create socket: %s" % msg)
                 server_socket.close()
