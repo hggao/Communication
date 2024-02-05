@@ -7,10 +7,6 @@ from datetime import datetime
 from threading import Thread
 import json
 
-# This enables communication server to listen on port LISTEN_PORT for incoming connections
-LISTEN_IP   = ""
-LISTEN_PORT = 2021
-
 def log(msg):
     # Remove these two lines for debugging
     if len(msg) > 1024:
@@ -349,6 +345,10 @@ class TransportServer(object):
         for tp in self.clients:
             tp.stop()
 
+
+# This enables communication server to listen on port LISTEN_PORT for incoming connections
+LISTEN_IP   = ""
+LISTEN_PORT = 2021
 
 if __name__ == "__main__":
     svr_ip   = LISTEN_IP
