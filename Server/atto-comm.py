@@ -260,7 +260,7 @@ class CommServerListener(Thread):
                 server_socket.bind((self.ip, self.port))
                 server_socket.listen(2)
                 server_socket.settimeout(1)
-                log("TCP listening at : %s:%d" % (self.ip, self.port))
+                log("TCP listening at : %s:%d" % (self.ip==""?"*":self.ip, self.port))
             except Exception as msg:
                 log("Error create socket: %s" % msg)
                 server_socket.close()
@@ -362,7 +362,7 @@ if __name__ == "__main__":
     # Register the signal handler for SIGTERM
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
-    log("Start communication service at %s:%d" % (svr_ip, svr_port))
+    log("Start atto-comm service")
     comm_svr = TransportServer(svr_ip, svr_port)
     comm_svr.start_service()
 
