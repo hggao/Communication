@@ -164,6 +164,8 @@ class Transport(object):
             self.udp_port = int(cmd["data"])
             self.udp_conn = UdpConnection(self.svr_ip, self.udp_port, self.on_udp_data_recv_callback)
             self.udp_conn.start()
+        elif cmd["action"] == "list_clients":
+            print(cmd["data"])
         else:
             dbg_log("XXX: PDU is not handled.")
 
@@ -198,6 +200,9 @@ class Transport(object):
 
     def broadcast_tcp_message(self, msg_str):
         self.send_tcp_pdu("broadcast", msg_str)
+
+    def list_clients(self):
+        self.send_tcp_pdu("list_clients", "")
 
     def send_tcp_data(self, data_str):
         self.send_tcp_pdu("data", data_str)

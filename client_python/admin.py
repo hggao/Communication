@@ -51,6 +51,7 @@ if __name__ == "__main__":
 
         if in_str == "help":
             print("Unsurpported command [%s], ignored. Supported commands:" % in_str)
+            print("    list         - List all clients")
             print("    totcp:<data> - Send tcp data to server for broadcasting")
             print("    toudp:<data> - Send udp data to server")
             print("    <data>       - Send general data to server")
@@ -59,6 +60,9 @@ if __name__ == "__main__":
             print("exit now......")
             tp.close()
             break;
+        elif in_str == "list":
+            print("List of all clients:")
+            tp.list_clients();
         elif in_str.startswith("totcp:"):
             print("Send tcp data to server for broadcasting......")
             tp.broadcast_tcp_message(in_str)
