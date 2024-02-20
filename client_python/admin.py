@@ -14,13 +14,20 @@ if __name__ == "__main__":
     tp = Transport(svr_ip, svr_port)
     tp.connect()
 
-    print("Type 'quit' to quit or anything else as a message send to other clients")
+    print("Type 'help' to show valid commands")
     while True:
         in_str = input()
         if len(in_str) == 0:
             continue
 
-        if in_str == "quit":
+        if in_str == "help":
+            print("Unsurpported command [%s], ignored. Supported commands:" % in_str)
+            print("    udp          - Ask server to create UDP channel")
+            print("    totcp:<data> - Send tcp data to server for broadcasting")
+            print("    toudp:<data> - Send udp data to server")
+            print("    <data>       - Send general data to server")
+            print("    quit         - Quit")
+        elif in_str == "quit":
             print("exit now......")
             tp.close()
             break;
@@ -33,13 +40,6 @@ if __name__ == "__main__":
         elif in_str.startswith("toudp:"):
             print("Send udp data to server......")
             tp.send_udp_data(in_str.encode())
-        elif in_str == "help":
-            print("Unsurpported command [%s], ignored. Supported commands:" % in_str)
-            print("    udp          - Ask server to create UDP channel")
-            print("    totcp:<data> - Send tcp data to server for broadcasting")
-            print("    toudp:<data> - Send udp data to server")
-            print("    <data>       - Send general data to server")
-            print("    quit         - Quit")
         else:
             print("Send general data to server......")
             tp.send_tcp_data(in_str)
