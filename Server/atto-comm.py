@@ -170,23 +170,30 @@ class Transport(object):
         self.tcp_conn = TcpConnection(self.tcp_socket, self.tcp_addr, self.on_tcp_data_recv_callback, self.on_tcp_close_cb)
         self.tcp_conn.start()
 
-    def on_tcp_data_recv_callback(self, data_bytes):
-        cmd = json.loads(data_bytes.decode())
-        if cmd["action"] == "create_udp_channel":
-            log("Client request to create UDP channel")
-            udp_port = self.creat_udp_channel()
-            reply = {
-                      "action": "create_udp_channel",
-                      "data": "%d" % udp_port
-                    }
-            self.send_tcp_data(json.dumps(reply).encode())
-        else:
-            self.tcp_recv_cb(self, data_bytes)
-
-    def on_udp_data_recv_callback(self, data_bytes):
-        self.udp_recv_cb(self, data_bytes)
-
-    def creat_udp_channel(self):
+#########################################################
+# cmd = {
+#     "action": ACTIONS,
+#     "data": DATA
+# }
+# ACTIONS:
+#     "create_udp_channel"
+#     "update_user"
+#     "update_status"
+#     "list_clients"
+# 
+# DATA:
+#     ui = {
+#         "user_id": "admin",
+#         "user_name": "admin",
+#         "user_domain": "na"
+#     }
+#     status = {
+#         "scene_id": "-1",
+#         "scene_pos": "0",
+#         "speed": "0"
+#     }
+#########################################################
+    def create_udp_channel(self):
         if self.udp_conn is not None:
             log("UDP socket channel created already, Ignore this request")
             return
@@ -204,7 +211,43 @@ class Transport(object):
                 continue
         self.udp_conn = UdpConnection(udp_socket, self.on_udp_data_recv_callback, self.on_udp_close_cb)
         self.udp_conn.start()
-        return udp_port
+        reply = {
+            "action": "create_udp_channel",
+            "data": "%d" % udp_port
+        }
+        self.send_tcp_data(json.dumps(reply).encode())
+
+    def update_user(self, ui_str):
+        log("User_Info: " + ui_str)
+        ui = json.loads(ui_str)
+
+    def update_status(self, si_str):
+        log("Status: " + si_str)
+        status = json.loads(si_str)
+
+    def list_clients(self):
+        clients = "Mimic client 001 info\nMimic client 001 info\n"
+        reply = {
+            "action": "list_clients",
+            "data": clients
+        }
+        self.send_tcp_data(json.dumps(reply).encode())
+
+    def on_tcp_data_recv_callback(self, data_bytes):
+        cmd = json.loads(data_bytes.decode())
+        if cmd["action"] == "create_udp_channel":
+            self.create_udp_channel()
+        elif cmd["action"] == "update_user":
+            self.update_user(cmd["data"])
+        elif cmd["action"] == "update_status":
+            self.update_status(cmd["data"])
+        elif cmd["action"] == "list_clients":
+            self.list_clients()
+        else:
+            self.tcp_recv_cb(self, data_bytes)
+
+    def on_udp_data_recv_callback(self, data_bytes):
+        self.udp_recv_cb(self, data_bytes)
 
     def send_tcp_data(self, data):
         if self.tcp_conn is None:
