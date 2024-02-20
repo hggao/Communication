@@ -1,6 +1,25 @@
 #!/usr/bin/env python
-import sys
+import json
 from libpyclient import Transport
+import sys
+
+def update_user_info(tp):
+    ui = {
+        "user_id": "admin",
+        "user_name": "admin",
+        "user_domain": "na"
+    }
+    ui_str = json.dumps(ui)
+    tp.client_update_user(ui_str)
+
+def update_status(tp):
+    status = {
+        "scene_id": "-1",
+        "scene_pos": "0",
+        "speed": "0"
+    }
+    status_str = json.dumps(status)
+    tp.client_update_status(status_str)
 
 if __name__ == "__main__":
     svr_ip = "127.0.0.1"
@@ -11,8 +30,18 @@ if __name__ == "__main__":
     if len(sys.argv) >= 2:
         svr_ip = sys.argv[1]
 
+    # 1. Connect to server
     tp = Transport(svr_ip, svr_port)
     tp.connect()
+
+    # 2. Tell server I'm the admin
+    update_user_info(tp)
+
+    # 3. Tell server I'm not in any scene
+    update_status(tp)
+
+    # 4. Tell server to create UDP channel
+    tp.create_udp_channel()
 
     print("Type 'help' to show valid commands")
     while True:
@@ -22,7 +51,6 @@ if __name__ == "__main__":
 
         if in_str == "help":
             print("Unsurpported command [%s], ignored. Supported commands:" % in_str)
-            print("    udp          - Ask server to create UDP channel")
             print("    totcp:<data> - Send tcp data to server for broadcasting")
             print("    toudp:<data> - Send udp data to server")
             print("    <data>       - Send general data to server")
@@ -31,9 +59,6 @@ if __name__ == "__main__":
             print("exit now......")
             tp.close()
             break;
-        elif in_str == "udp":
-            print("Ask server to create UDP channel......")
-            tp.create_udp_channel()
         elif in_str.startswith("totcp:"):
             print("Send tcp data to server for broadcasting......")
             tp.broadcast_tcp_message(in_str)

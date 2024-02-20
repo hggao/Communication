@@ -1,9 +1,14 @@
 #!/usr/bin/env python
-import socket
-import time
-from threading import Thread
 import json
+import socket
+from threading import Thread
+import time
 
+debugging_on = True
+
+def dbg_log(msg):
+    if debugging_on:
+        print(msg)
 
 class TcpConnection(Thread):
     PACKET_LIMIT = 1024 * 1024
@@ -41,8 +46,11 @@ class TcpConnection(Thread):
             n_received = len(data)
         return data
 
+    def is_connected(self):
+        return self.running;
+
     def run(self):
-        print("Connect to communication server at %s:%d" % (self.svr_ip, self.svr_port))
+        dbg_log("Connect to communication server at %s:%d" % (self.svr_ip, self.svr_port))
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect((self.svr_ip, self.svr_port))
         self.socket.settimeout(1)
@@ -52,21 +60,21 @@ class TcpConnection(Thread):
             try:
                 client_pdu = self.recv_data()
                 if not client_pdu:
-                    print("Connnection closed by peer, quit this connection.")
+                    dbg_log("Connnection closed by peer, quit this connection.")
                     break
             except socket.timeout:
                 continue
             except socket.error as v:
                 errorcode = v[0]
-                print("Socket recv exception: %s" % str(errorcode))
+                dbg_log("Socket recv exception: %s" % str(errorcode))
                 break
             else:
                 if self.recv_cb is not None:
                     self.recv_cb(client_pdu)
                 else:
-                    print("XXX: Discard message due to callback not available")
+                    dbg_log("XXX: Discard message due to callback not available")
 
-        print("Client TcpConnection exit.")
+        dbg_log("Client TcpConnection exit.")
         self.socket.close()
         self.socket = None
 
@@ -103,7 +111,7 @@ class UdpConnection(Thread):
         return data
 
     def run(self):
-        print("Connect to communication server at %s:%d" % (self.svr_ip, self.svr_port))
+        dbg_log("Connect to communication server at %s:%d" % (self.svr_ip, self.svr_port))
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.connect((self.svr_ip, self.svr_port))
         self.socket.settimeout(1)
@@ -114,21 +122,21 @@ class UdpConnection(Thread):
             try:
                 client_pdu = self.recv_data()
                 if not client_pdu:
-                    print("Connnection closed by peer, quit this connection.")
+                    dbg_log("Connnection closed by peer, quit this connection.")
                     break
             except socket.timeout:
                 continue
             except socket.error as v:
                 errorcode = v[0]
-                print("Socket recv exception: %s" % str(errorcode))
+                dbg_log("Socket recv exception: %s" % str(errorcode))
                 break
             else:
                 if self.recv_cb is not None:
                     self.recv_cb(client_pdu)
                 else:
-                    print("Discard message due to no callback available")
+                    dbg_log("Discard message due to no callback available")
 
-        print("Client UdpConnection exit.")
+        dbg_log("Client UdpConnection exit.")
         self.socket.close()
         self.socket = None
 
@@ -149,7 +157,7 @@ class Transport(object):
         self.udp_conn = None
 
     def on_tcp_data_recv_callback(self, data_bytes):
-        print("Tcp data received from server: [%s]" % data_bytes.decode())
+        dbg_log("Tcp data received from server: [%s]" % data_bytes.decode())
         cmd = json.loads(data_bytes.decode())
         if cmd["action"] == "create_udp_channel":
             assert self.udp_conn is None, "Udp channel had already created."
@@ -157,14 +165,20 @@ class Transport(object):
             self.udp_conn = UdpConnection(self.svr_ip, self.udp_port, self.on_udp_data_recv_callback)
             self.udp_conn.start()
         else:
-            print("XXX: PDU is not handled.")
+            dbg_log("XXX: PDU is not handled.")
 
     def on_udp_data_recv_callback(self, data_bytes):
-        print("Udp data received from server, %d bytes. (XXX: Not handled.)" % len(data_bytes))
+        dbg_log("Udp data received from server, %d bytes. (XXX: Not handled.)" % len(data_bytes))
 
     def connect(self):
         self.tcp_conn = TcpConnection(self.svr_ip, self.svr_port, self.on_tcp_data_recv_callback)
         self.tcp_conn.start()
+        wait_tries = 20
+        while wait_tries > 0:
+            if self.tcp_conn.is_connected():
+                return
+            time.sleep(0.05)
+            wait_tries -= 1
 
     def send_tcp_pdu(self, action, data):
         cmd = {"action": action,
@@ -175,6 +189,9 @@ class Transport(object):
 
     def create_udp_channel(self):
         self.send_tcp_pdu("create_udp_channel", "")
+
+    def client_update_user(self, usr_info):
+        self.send_tcp_pdu("update_user", usr_info)
 
     def client_update_status(self, status_str):
         self.send_tcp_pdu("update_status", status_str)
@@ -187,7 +204,7 @@ class Transport(object):
 
     def send_udp_data(self, data_bytes):
         if self.udp_conn is None:
-            print("XXX: No Udp connection yet.")
+            dbg_log("XXX: No Udp connection yet.")
             return
         self.udp_conn.send_data(data_bytes)
 
