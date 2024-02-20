@@ -219,6 +219,9 @@ if __name__ == "__main__":
     print("Type 'quit' to quit or anything else as a message send to other clients")
     while True:
         in_str = input()
+        if (len(in_str) == 0)
+            continue
+
         if in_str == "quit":
             print("exit now......")
             tp.close()
@@ -236,7 +239,12 @@ if __name__ == "__main__":
             print("Send general data to server......")
             tp.send_tcp_data(in_str)
         else:
-            print("Unsurpported command, ignored")
+            print("Unsurpported command [%s], ignored. Supported commands:" % in_str)
+            print("    udp          - Ask server to create UDP channel")
+            print("    totcp:<data> - Send tcp data to server for broadcasting")
+            print("    toudp:<data> - Send udp data to server")
+            print("    <data>       - Send general data to server")
+            print("    quit         - Quit")
 
     tp.close()
     print("Done!")
