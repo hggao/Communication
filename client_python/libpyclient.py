@@ -173,11 +173,11 @@ class Transport(object):
     def connect(self):
         self.tcp_conn = TcpConnection(self.svr_ip, self.svr_port, self.on_tcp_data_recv_callback)
         self.tcp_conn.start()
-        wait_tries = 20
+        wait_tries = 50
         while wait_tries > 0:
             if self.tcp_conn.is_connected():
                 return
-            time.sleep(0.05)
+            time.sleep(0.1)
             wait_tries -= 1
 
     def send_tcp_pdu(self, action, data):
