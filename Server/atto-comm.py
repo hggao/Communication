@@ -176,6 +176,7 @@ class Transport(object):
         self.udp_recv_cb = udp_recv_cb
         self.tp_close_cb = tp_close_cb
         self.client_info = {}
+        self.client_info_init()
         self.closed = False
 
     def client_info_init(self):
