@@ -383,8 +383,10 @@ class TransportServer(object):
 
     def on_udp_recv_callback(self, tp, data_bytes):
         #log("Received UDP data %d bytes from %d, dispatch to all other clients" % (len(data_bytes), tp.tp_id))
+        sender_pos = tp.client_info["scene_id"]
         for client in self.clients:
-            if client != tp:
+            client_pos = client.client_info["scene_id"]
+            if client != tp and client_pos == sender_pos:
                 client.send_udp_data(data_bytes)
 
     def on_new_connect_cb(self, tcp_socket, tcp_addr):

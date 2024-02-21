@@ -14,7 +14,7 @@ def update_user_info(tp):
 
 def update_status(tp):
     status = {
-        "scene_id": "-1",
+        "scene_id": "-2",
         "scene_pos": "0",
         "speed": "0"
     }
