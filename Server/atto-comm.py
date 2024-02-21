@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import signal
 import socket
 import sys
@@ -7,6 +8,17 @@ import time
 from datetime import datetime
 from threading import Thread
 import json
+
+def may_clean_log(file_path):
+    if not os.path.exists(file_path):
+        return
+    file_length = os.path.getsize(file_path)
+    if file_length < 1024*1024*1024:
+        return
+    try:
+        os.remove(file_path)
+    except OSError as e:
+        print(f"Error deleting the file {file_path}: {e}")
 
 def log(msg):
     # Remove these two lines for debugging
@@ -430,6 +442,7 @@ if __name__ == "__main__":
     # Register the signal handler for SIGTERM
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
+    may_clean_log(LOG_PATH)
     log("Start atto-comm service")
     comm_svr = TransportServer(svr_ip, svr_port)
     comm_svr.start_service()
