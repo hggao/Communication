@@ -364,7 +364,7 @@ class TransportServer(object):
     def list_clients(self, tp):
         output = ""
         for client in self.clients:
-            output += "%d, %s\n" % (client.tp_id, json.dumps(tp.client_info))
+            output += "%d, %s\n" % (client.tp_id, json.dumps(client.client_info))
         reply = {
             "action": "list_clients",
             "data": output
