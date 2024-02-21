@@ -154,97 +154,44 @@ class UdpConnection(Thread):
         #TODO: wait up to 1 second until thread quit
 
 class Transport(object):
-    def __init__(self, tp_id, tp_svr, tcp_socket, tcp_addr, tcp_recv_cb, udp_recv_cb, tp_close_cb):
+    def __init__(self, tp_id, tcp_socket, tcp_addr, tcp_recv_cb, udp_recv_cb, tp_close_cb):
         self.tp_id = tp_id;
         self.tcp_conn = None
         self.udp_conn = None
-        self.tp_svr = tp_svr
         self.tcp_socket = tcp_socket
         self.tcp_addr = tcp_addr
         self.tcp_recv_cb = tcp_recv_cb
         self.udp_recv_cb = udp_recv_cb
         self.tp_close_cb = tp_close_cb
+        self.client_info = {}
         self.closed = False
+
+    def client_info_init(self):
+        self.client_info["user_id"]     = "N/A"
+        self.client_info["user_name"]   = "N/A"
+        self.client_info["user_domain"] = "N/A"
+        self.client_info["scene_id"]    = "-1"
+        self.client_info["scene_pos"]   = "0"
+        self.client_info["speed"]       = "0"
+
+    def update_user(self, ui_str):
+        ui = json.loads(ui_str)
+        self.client_info["user_id"]     = ui["user_id"]
+        self.client_info["user_name"]   = ui["user_name"]
+        self.client_info["user_domain"] = ui["user_domain"]
+
+    def update_status(self, status_str):
+        status = json.loads(status_str)
+        self.client_info["scene_id"]    = status["scene_id"]
+        self.client_info["scene_pos"]   = status["scene_pos"]
+        self.client_info["speed"]       = status["speed"]
 
     def start(self):
         self.tcp_conn = TcpConnection(self.tcp_socket, self.tcp_addr, self.on_tcp_data_recv_callback, self.on_tcp_close_cb)
         self.tcp_conn.start()
 
-#########################################################
-# cmd = {
-#     "action": ACTIONS,
-#     "data": DATA
-# }
-# ACTIONS:
-#     "create_udp_channel"
-#     "update_user"
-#     "update_status"
-#     "list_clients"
-# 
-# DATA:
-#     ui = {
-#         "user_id": "admin",
-#         "user_name": "admin",
-#         "user_domain": "na"
-#     }
-#     status = {
-#         "scene_id": "-1",
-#         "scene_pos": "0",
-#         "speed": "0"
-#     }
-#########################################################
-    def create_udp_channel(self):
-        if self.udp_conn is not None:
-            log("UDP socket channel created already, Ignore this request")
-            return
-        udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,1)
-        udp_socket.settimeout(1)
-        udp_port = self.tp_svr.get_next_udp_port()
-        while True:
-            try:
-                udp_socket.bind(("", udp_port))
-                break
-            except socket.error:
-                log("Bind on port %d failed, try another port" % udp_port)
-                udp_port = self.tp_svr.get_next_udp_port()
-                continue
-        self.udp_conn = UdpConnection(udp_socket, self.on_udp_data_recv_callback, self.on_udp_close_cb)
-        self.udp_conn.start()
-        reply = {
-            "action": "create_udp_channel",
-            "data": "%d" % udp_port
-        }
-        self.send_tcp_data(json.dumps(reply).encode())
-
-    def update_user(self, ui_str):
-        log("User_Info: " + ui_str)
-        ui = json.loads(ui_str)
-
-    def update_status(self, si_str):
-        log("Status: " + si_str)
-        status = json.loads(si_str)
-
-    def list_clients(self):
-        clients = "Mimic client 001 info\nMimic client 001 info\n"
-        reply = {
-            "action": "list_clients",
-            "data": clients
-        }
-        self.send_tcp_data(json.dumps(reply).encode())
-
     def on_tcp_data_recv_callback(self, data_bytes):
-        cmd = json.loads(data_bytes.decode())
-        if cmd["action"] == "create_udp_channel":
-            self.create_udp_channel()
-        elif cmd["action"] == "update_user":
-            self.update_user(cmd["data"])
-        elif cmd["action"] == "update_status":
-            self.update_status(cmd["data"])
-        elif cmd["action"] == "list_clients":
-            self.list_clients()
-        else:
-            self.tcp_recv_cb(self, data_bytes)
+        self.tcp_recv_cb(self, data_bytes)
 
     def on_udp_data_recv_callback(self, data_bytes):
         self.udp_recv_cb(self, data_bytes)
@@ -349,15 +296,88 @@ class TransportServer(object):
             self.udp_port = 30001
         return self.udp_port
 
+#########################################################
+# cmd = {
+#     "action": ACTIONS,
+#     "data": DATA
+# }
+# ACTIONS:
+#     "create_udp_channel"
+#     "update_user"
+#     "update_status"
+#     "list_clients"
+# 
+# DATA:
+#     ui = {
+#         "user_id": "admin",
+#         "user_name": "admin",
+#         "user_domain": "na"
+#     }
+#     status = {
+#         "scene_id": "-1",
+#         "scene_pos": "0",
+#         "speed": "0"
+#     }
+#########################################################
+    def create_udp_channel(self, tp):
+        if tp.udp_conn is not None:
+            log("UDP socket channel created already, Ignore this request")
+            return
+        udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,1)
+        udp_socket.settimeout(1)
+        udp_port = self.get_next_udp_port()
+        while True:
+            try:
+                udp_socket.bind(("", udp_port))
+                break
+            except socket.error:
+                log("Bind on port %d failed, try another port" % udp_port)
+                udp_port = self.get_next_udp_port()
+                continue
+        tp.udp_conn = UdpConnection(udp_socket, tp.on_udp_data_recv_callback, tp.on_udp_close_cb)
+        tp.udp_conn.start()
+        reply = {
+            "action": "create_udp_channel",
+            "data": "%d" % udp_port
+        }
+        tp.send_tcp_data(json.dumps(reply).encode())
+
+    def update_user(self, tp, ui_str):
+        tp.update_user(ui_str)
+
+    def update_status(self, tp, si_str):
+        tp.update_status(si_str)
+
+    def list_clients(self, tp):
+        output = ""
+        for client in self.clients:
+            output += "%d, %s\n" % (client.tp_id, json.dumps(tp.client_info))
+        reply = {
+            "action": "list_clients",
+            "data": output
+        }
+        tp.send_tcp_data(json.dumps(reply).encode())
+
+    def broadcast_message(self, tp, data_bytes):
+        for client in self.clients:
+            if client != tp:
+                client.send_tcp_data(data_bytes)
+
     def on_tcp_recv_callback(self, tp, data_bytes):
         data_str = data_bytes.decode()
-        log("Tcp data from %d: [%s]" % (tp.tp_id, data_str))
+        log("TCP data from %d: [%s]" % (tp.tp_id, data_str))
         cmd = json.loads(data_str)
-        if cmd["action"] == "broadcast":
-            log("Client request to broadcast message")
-            for client in self.clients:
-                if client != tp:
-                    client.send_tcp_data(data_bytes)
+        if cmd["action"] == "create_udp_channel":
+            self.create_udp_channel(tp)
+        elif cmd["action"] == "update_user":
+            self.update_user(tp, cmd["data"])
+        elif cmd["action"] == "update_status":
+            self.update_status(tp, cmd["data"])
+        elif cmd["action"] == "list_clients":
+            self.list_clients(tp)
+        elif cmd["action"] == "broadcast":
+            self.broadcast_message(tp, data_bytes)
         else:
             log("No handling on the data, discard.")
 
@@ -369,10 +389,10 @@ class TransportServer(object):
 
     def on_new_connect_cb(self, tcp_socket, tcp_addr):
         self.client_id_generator += 1
-        tp = Transport(self.client_id_generator, self, tcp_socket, tcp_addr,
+        tp = Transport(self.client_id_generator, tcp_socket, tcp_addr,
                        self.on_tcp_recv_callback, self.on_udp_recv_callback, self.on_connection_close_cb)
-        self.clients.append(tp)
         tp.start()
+        self.clients.append(tp)
 
     def on_connection_close_cb(self, tp):
         log("Remove client: %d" % tp.tp_id)

@@ -157,7 +157,6 @@ class Transport(object):
         self.udp_conn = None
 
     def on_tcp_data_recv_callback(self, data_bytes):
-        dbg_log("Tcp data received from server: [%s]" % data_bytes.decode())
         cmd = json.loads(data_bytes.decode())
         if cmd["action"] == "create_udp_channel":
             assert self.udp_conn is None, "Udp channel had already created."
@@ -167,7 +166,7 @@ class Transport(object):
         elif cmd["action"] == "list_clients":
             print(cmd["data"])
         else:
-            dbg_log("XXX: PDU is not handled.")
+            dbg_log("PDU not handled: [%s]" % data_bytes.decode())
 
     def on_udp_data_recv_callback(self, data_bytes):
         dbg_log("Udp data received from server, %d bytes. (XXX: Not handled.)" % len(data_bytes))
