@@ -2,6 +2,7 @@
 import json
 from libpyclient import Transport
 import sys
+import time
 
 def update_user_info(tp):
     ui = {
@@ -43,9 +44,11 @@ if __name__ == "__main__":
     # 4. Tell server to create UDP channel
     tp.create_udp_channel()
 
+    time.sleep(1)
+    prompt_str = "[atto-admin@%s]#" % svr_ip;
     print("Type 'help' to show valid commands")
     while True:
-        in_str = input()
+        in_str = input(prompt_str)
         if len(in_str) == 0:
             continue
 
@@ -62,7 +65,8 @@ if __name__ == "__main__":
             break;
         elif in_str == "list":
             print("List of all clients:")
-            tp.list_clients();
+            tp.list_clients()
+            time.sleep(1)
         elif in_str.startswith("totcp:"):
             print("Send tcp data to server for broadcasting......")
             tp.broadcast_tcp_message(in_str)
