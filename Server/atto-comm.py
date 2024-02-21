@@ -372,8 +372,10 @@ class TransportServer(object):
         tp.send_tcp_data(json.dumps(reply).encode())
 
     def broadcast_message(self, tp, data_bytes):
+        sender_pos = tp.client_info["scene_id"]
         for client in self.clients:
-            if client != tp:
+            client_pos = client.client_info["scene_id"]
+            if client != tp and client_pos == sender_pos:
                 client.send_tcp_data(data_bytes)
 
     def on_tcp_recv_callback(self, tp, data_bytes):
