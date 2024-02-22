@@ -10,7 +10,7 @@ namespace CommClient
     {
         static void Main(string[] args)
         {
-            string svr_ip = "127.0.0.1";
+            string svr_ip = "www.tenkmiles.com";
             int svr_port = 2021;
 
             if (args.Length >= 1)
