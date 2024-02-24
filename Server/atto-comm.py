@@ -101,7 +101,7 @@ class TcpConnection(Thread):
         #TODO: wait up to 1 second until thread quit
 
 class UdpConnection(Thread):
-    PACKET_LIMIT = 1024
+    PACKET_LIMIT = 1472
 
     def __init__(self, socket, recv_cb, close_cb):
         Thread.__init__(self)
