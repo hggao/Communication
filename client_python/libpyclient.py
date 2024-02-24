@@ -169,7 +169,12 @@ class Transport(object):
             dbg_log("PDU not handled: [%s]" % data_bytes.decode())
 
     def on_udp_data_recv_callback(self, data_bytes):
-        dbg_log("Udp data received from server, %d bytes. (XXX: Not handled.)" % len(data_bytes))
+        #dbg_log("Udp data received from server, %d bytes. (XXX: Not handled.)" % len(data_bytes))
+        #i = 0;
+        #while i < len(data_bytes):
+        #    print(int.from_bytes(data_bytes[i:i+1], byteorder='little', signed=True))
+        #    i += 2
+        pass
 
     def connect(self):
         self.tcp_conn = TcpConnection(self.svr_ip, self.svr_port, self.on_tcp_data_recv_callback)
