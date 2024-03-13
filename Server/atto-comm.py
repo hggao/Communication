@@ -13,7 +13,7 @@ def may_clean_log(file_path):
     if not os.path.exists(file_path):
         return
     file_length = os.path.getsize(file_path)
-    if file_length < 1024*1024*1024:
+    if file_length < 100 * 1024 * 1024:
         return
     try:
         os.remove(file_path)
@@ -113,7 +113,7 @@ class UdpConnection(Thread):
 
     def send_data(self, data_bytes):
         if self.client_addr is None:
-            log("XXX: Don't know client UDP addr yet, discard sending")
+            #log("XXX: Don't know client UDP addr yet, discard sending")
             return
         data_len = len(data_bytes)
         assert data_len != 0, "Try to send empty string shouldn't happen."
@@ -217,7 +217,7 @@ class Transport(object):
 
     def send_udp_data(self, data):
         if self.udp_conn is None:
-            log("Warning: No Udp connection for this tp client, skip sending data to it.")
+            #log("Warning: No Udp connection for this tp client, skip sending data to it.")
             return
         self.udp_conn.send_data(data)
 
@@ -359,8 +359,13 @@ class TransportServer(object):
     def update_user(self, tp, ui_str):
         tp.update_user(ui_str)
 
-    def update_status(self, tp, si_str):
+    def update_status(self, tp, si_str, data_bytes):
         tp.update_status(si_str)
+        sender_scene = tp.client_info["scene_id"]
+        for client in self.clients:
+            client_scene = client.client_info["scene_id"]
+            if client != tp and client_scene == sender_scene:
+                client.send_tcp_data(data_bytes)
 
     def list_clients(self, tp):
         output = ""
@@ -381,14 +386,14 @@ class TransportServer(object):
 
     def on_tcp_recv_callback(self, tp, data_bytes):
         data_str = data_bytes.decode()
-        log("TCP data from %d: [%s]" % (tp.tp_id, data_str))
+        #log("TCP data from %d: [%s]" % (tp.tp_id, data_str))
         cmd = json.loads(data_str)
         if cmd["action"] == "create_udp_channel":
             self.create_udp_channel(tp)
         elif cmd["action"] == "update_user":
             self.update_user(tp, cmd["data"])
         elif cmd["action"] == "update_status":
-            self.update_status(tp, cmd["data"])
+            self.update_status(tp, cmd["data"], data_bytes)
         elif cmd["action"] == "list_clients":
             self.list_clients(tp)
         elif cmd["action"] == "broadcast":
