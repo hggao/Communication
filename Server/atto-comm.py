@@ -359,13 +359,27 @@ class TransportServer(object):
     def update_user(self, tp, ui_str):
         tp.update_user(ui_str)
 
-    def update_status(self, tp, si_str, data_bytes):
+    def update_status(self, tp, si_str):
+        # Save in tp itself
         tp.update_status(si_str)
+
+        #Combine basic user info
+        info = json.loads(si_str)
+        info["user_id"]     = tp.client_info["user_id"]
+        info["user_name"]   = tp.client_info["user_name"]
+        info["user_domain"] = tp.client_info["user_domain"]
+        info_str = json.dumps(info)
+        msg = {
+            "action": "rider_status_update",
+            "data": info_str
+        }
+
+        # Broadcast
         sender_scene = tp.client_info["scene_id"]
         for client in self.clients:
             client_scene = client.client_info["scene_id"]
             if client != tp and client_scene == sender_scene:
-                client.send_tcp_data(data_bytes)
+                client.send_tcp_data(json.dumps(msg).encode())
 
     def list_clients(self, tp):
         output = ""
@@ -393,7 +407,7 @@ class TransportServer(object):
         elif cmd["action"] == "update_user":
             self.update_user(tp, cmd["data"])
         elif cmd["action"] == "update_status":
-            self.update_status(tp, cmd["data"], data_bytes)
+            self.update_status(tp, cmd["data"])
         elif cmd["action"] == "list_clients":
             self.list_clients(tp)
         elif cmd["action"] == "broadcast":
