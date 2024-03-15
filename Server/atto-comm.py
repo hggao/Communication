@@ -129,9 +129,6 @@ class UdpConnection(Thread):
         if self.client_addr is None:
             log("Received first UDP data, save addr %s" % str(addr))
             self.client_addr = addr
-        elif self.client_addr != addr:
-            log("XXX: Received UDP data not from %s, not initial addr %s" % (str(addr), str(self.client_addr)))
-            #TODO: Need further handling about this
         return data
 
     def run(self):
@@ -422,6 +419,8 @@ class TransportServer(object):
             client_pos = client.client_info["scene_id"]
             if client != tp and client_pos == sender_pos:
                 client.send_udp_data(data_bytes)
+                #log("%d bytes udp data send from %s to %s" % (len(data_bytes), tp.client_info["user_id"], client.client_info["user_id"]))
+
 
     def on_new_connect_cb(self, tcp_socket, tcp_addr):
         self.client_id_generator += 1
